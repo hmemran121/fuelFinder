@@ -26,7 +26,7 @@ const hindSiliguri = Hind_Siliguri({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://fuel-finder-dhaka.vercel.app"),
-  title: "ফয়েল ফাইন্ডার ঢাকা | Fuel Finder Dhaka",
+  title: "তেল পাম্প খুঁজুন | Fuel Finder Dhaka",
   description: "ঢাকার সমস্ত সিএনজি এবং ফিলিং স্টেশনের রিয়েল-টাইম আপডেট পান।",
   keywords: ["Fuel Finder", "Dhaka Fuel", "CNG Station", "Petrol Pump Dhaka", "Live Fuel Status"],
   authors: [{ name: "Nexus Intelligence" }],
