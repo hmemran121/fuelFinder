@@ -92,7 +92,7 @@ export const PWAInstallPrompt = () => {
           exit={{ y: 200, opacity: 0 }}
           className="fixed bottom-24 sm:bottom-8 left-4 right-4 z-[3000] max-w-sm mx-auto pointer-events-auto"
         >
-          <div className="glass-premium border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.3)] rounded-[32px] overflow-hidden relative">
+          <div className="bg-white/95 backdrop-blur-2xl border border-white/40 shadow-[0_20px_50px_rgba(0,0,0,0.3)] rounded-[32px] overflow-hidden relative">
             {/* Vibrant Background Glow */}
             <div className="absolute -top-10 -right-10 w-40 h-40 bg-primary/20 rounded-full blur-3xl animate-pulse" />
             <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-violet-500/10 rounded-full blur-3xl" />
