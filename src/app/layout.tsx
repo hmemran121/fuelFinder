@@ -6,6 +6,7 @@ import { BroadcastOverlay } from "@/components/common/BroadcastOverlay";
 import { AuthProvider } from "@/components/providers/AuthProvider";
 import { NotificationManager } from "@/components/common/NotificationManager";
 import { AlertSettingsModal } from "@/components/common/AlertSettingsModal";
+import { PWAInstallPrompt } from "@/components/common/PWAInstallPrompt";
 
 const geistSans = Geist({
 
@@ -83,6 +84,7 @@ export default function RootLayout({
             <BroadcastOverlay />
             <NotificationManager />
             <AlertSettingsModal />
+            <PWAInstallPrompt />
             {children}
             <BottomNav />
           </main>
