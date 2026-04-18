@@ -1,0 +1,37 @@
+name: Daily Fuel Station Deep Sync
+
+on:
+  schedule:
+    # Run once a day at 18:00 UTC (Midnight Dhaka Time)
+    - cron: '0 18 * * *'
+  workflow_dispatch: # Allow manual triggering from GitHub UI
+
+jobs:
+  sync-data:
+    name: Execute Headless Intelligence Engine
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Install Chrome
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+
+      - name: Run Deep Sync Script
+        env:
+          FIREBASE_SERVICE_ACCOUNT_BASE64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_BASE64 }}
+          # Path to the Chrome executable installed in the previous step
+          CHROME_PATH: /usr/bin/google-chrome
+        run: node scripts/headless-sync.mjs

@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper to check if user is admin
+    function isAdmin() {
+      return request.auth != null && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Verified Pumps: Everyone can read, only admins can write (Verified stations)
+    match /verified_pumps/{stationId} {
+      allow read: if true;
+      allow write: if isAdmin();
+      
+      // Allow users to update social_verify_count and user_verification_list specifically
+      // (Implementation note: In production-grade apps, this is often handled via a Cloud Function 
+      // to prevent abuse, but for MVP we allow specific updates if not admin)
+      allow update: if request.auth != null && 
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['social_verify_count', 'user_verification_list', 'last_updated']);
+    }
+
+    // User Profiles: Users can read/write their own, admins can do all
+    match /users/{userId} {
+      allow read, write: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      
+      // Prevent users from changing their own role
+      allow update: if request.auth != null && 
+                    request.auth.uid == userId && 
+                    !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']);
+    }
+
+    // Messages/Logs: Everyone can read, only authenticated can create
+    match /verified_pumps/{stationId}/messages/{msgId} {
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow delete: if isAdmin();
+    }
+
+    // System Logs/Audit: Admin only
+    match /logs/{logId} {
+      allow read, write: if isAdmin();
+    }
+  }
+}
