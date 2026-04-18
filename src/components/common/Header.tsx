@@ -50,22 +50,21 @@ export const Header = () => {
         
         {/* Logo Section */}
         <Link href="/" className="glass-premium rounded-[32px] p-2 pr-6 flex items-center gap-4 shadow-2xl transition-all border-white/20 group">
-          <motion.div 
-            whileHover={{ rotate: 0 }}
+          <motion.div
+            whileHover={{ rotate: 0, scale: 1.05 }}
             initial={{ rotate: 12 }}
-            className="w-10 h-10 bg-primary/90 backdrop-blur-md rounded-2xl flex items-center justify-center text-white shadow-[0_0_25px_rgba(37,99,235,0.4)] transition-transform group-hover:rotate-0 border border-white/30"
+            className="w-11 h-11 rounded-2xl flex items-center justify-center transition-transform group-hover:rotate-0 border border-white/20 shadow-[0_4px_20px_rgba(99,102,241,0.45)] relative overflow-hidden"
+            style={{ background: "linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #f59e0b 100%)" }}
           >
-            <Fuel size={22} className="fill-white/20" />
+            {/* Inner glow */}
+            <div className="absolute inset-0 bg-white/10 rounded-2xl" />
+            <Fuel size={21} className="relative z-10 text-white drop-shadow-[0_1px_4px_rgba(0,0,0,0.3)]" />
           </motion.div>
 
           <div className="flex flex-col">
             <h1 className="text-sm font-black italic tracking-tighter text-foreground leading-none">
               FUEL FINDER <span className="text-primary">DHAKA</span>
             </h1>
-            <span className="text-[7px] font-black uppercase tracking-[0.3em] text-slate-500 mt-0.5">
-              Logistics Engine • 2.0
-            </span>
-
           </div>
         </Link>
 
