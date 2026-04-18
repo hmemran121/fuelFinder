@@ -87,28 +87,17 @@ function LocationButton({ map }: { map: L.Map | null }) {
   const handleLocate = async () => {
     if (!map || status === "loading") return;
 
-    // 1. Check if Geolocation API is available in this browser/environment
+    // Check if Geolocation API exists at all
     if (!navigator.geolocation) {
       showMessage("এই ব্রাউজারে লোকেশন সাপোর্ট নেই।", "error");
       return;
     }
 
-    // 2. Proactively check permission state (avoids silent failures)
-    if (navigator.permissions) {
-      try {
-        const permissionStatus = await navigator.permissions.query({ name: "geolocation" });
-        if (permissionStatus.state === "denied") {
-          showMessage("লোকেশন অ্যাক্সেস বন্ধ আছে। ব্রাউজার সেটিংস থেকে অনুমতি দিন।", "error");
-          return;
-        }
-      } catch {
-        // Some browsers don't support permissions.query — silently continue
-      }
-    }
-
     setStatus("loading");
 
-    // 3. Use Leaflet's built-in locate() — auto-handles HTTPS vs HTTP
+    // Always attempt — let the browser show its own permission prompt.
+    // Do NOT pre-check navigator.permissions first, as a cached "denied" state
+    // will block the browser from re-prompting the user on mobile.
     map.locate({ setView: true, maxZoom: 16, enableHighAccuracy: true, timeout: 10000 });
 
     const onFound = () => {
@@ -121,7 +110,8 @@ function LocationButton({ map }: { map: L.Map | null }) {
     onError = (e: L.ErrorEvent) => {
       map.off("locationfound", onFound);
       const errorMessages: Record<number, string> = {
-        1: "লোকেশন অ্যাক্সেস বন্ধ আছে। ব্রাউজার সেটিংস থেকে অনুমতি দিন।",
+        // Code 1: Permission denied — tell user HOW to reset it on mobile
+        1: "লোকেশন অ্যাক্সেস বন্ধ আছে। URL বারের 🔒 আইকনে ট্যাপ করে Site Settings > Location > Allow করুন।",
         2: "লোকেশন এই মুহূর্তে পাওয়া যাচ্ছে না। GPS চালু আছে কিনা দেখুন।",
         3: "লোকেশন খুঁজতে বেশি সময় লাগছে। আবার চেষ্টা করুন।",
       };
@@ -132,6 +122,7 @@ function LocationButton({ map }: { map: L.Map | null }) {
     map.once("locationfound", onFound);
     map.once("locationerror", onError);
   };
+
 
   return (
     <div className="absolute bottom-[280px] sm:bottom-[220px] right-3 z-[1000] pointer-events-auto flex flex-col items-end gap-2">
