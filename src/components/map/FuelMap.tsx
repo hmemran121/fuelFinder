@@ -68,42 +68,107 @@ function ChangeView({ center, zoom }: { center: [number, number], zoom: number }
   return null;
 }
 
-// User Location Controller
+// Production-Grade User Location Controller
+// Works on: localhost (dev), HTTPS (production/Vercel)
+// Handles: permission denied, unavailable, timeout — with proper in-app UI
 function LocationButton({ map }: { map: L.Map | null }) {
-  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [message, setMessage] = useState("");
 
-  const handleLocate = () => {
-    if (!map) return;
-    setLoading(true);
-    map.locate({ setView: true, maxZoom: 16 });
-    
-    const onLocation = () => setLoading(false);
-    const onError = () => {
-      setLoading(false);
-      alert("Location access denied or unavailable.");
+  const showMessage = (msg: string, type: "success" | "error") => {
+    setStatus(type);
+    setMessage(msg);
+    setTimeout(() => {
+      setStatus("idle");
+      setMessage("");
+    }, 4000);
+  };
+
+  const handleLocate = async () => {
+    if (!map || status === "loading") return;
+
+    // 1. Check if Geolocation API is available in this browser/environment
+    if (!navigator.geolocation) {
+      showMessage("এই ব্রাউজারে লোকেশন সাপোর্ট নেই।", "error");
+      return;
+    }
+
+    // 2. Proactively check permission state (avoids silent failures)
+    if (navigator.permissions) {
+      try {
+        const permissionStatus = await navigator.permissions.query({ name: "geolocation" });
+        if (permissionStatus.state === "denied") {
+          showMessage("লোকেশন অ্যাক্সেস বন্ধ আছে। ব্রাউজার সেটিংস থেকে অনুমতি দিন।", "error");
+          return;
+        }
+      } catch {
+        // Some browsers don't support permissions.query — silently continue
+      }
+    }
+
+    setStatus("loading");
+
+    // 3. Use Leaflet's built-in locate() — auto-handles HTTPS vs HTTP
+    map.locate({ setView: true, maxZoom: 16, enableHighAccuracy: true, timeout: 10000 });
+
+    const onFound = () => {
+      map.off("locationerror", onError);
+      showMessage("আপনার লোকেশন পাওয়া গেছে!", "success");
     };
 
-    map.once("locationfound", onLocation);
+    // eslint-disable-next-line prefer-const
+    let onError: (e: L.ErrorEvent) => void;
+    onError = (e: L.ErrorEvent) => {
+      map.off("locationfound", onFound);
+      const errorMessages: Record<number, string> = {
+        1: "লোকেশন অ্যাক্সেস বন্ধ আছে। ব্রাউজার সেটিংস থেকে অনুমতি দিন।",
+        2: "লোকেশন এই মুহূর্তে পাওয়া যাচ্ছে না। GPS চালু আছে কিনা দেখুন।",
+        3: "লোকেশন খুঁজতে বেশি সময় লাগছে। আবার চেষ্টা করুন।",
+      };
+      const msg = errorMessages[e.code] ?? "লোকেশন সনাক্ত করা যায়নি।";
+      showMessage(msg, "error");
+    };
+
+    map.once("locationfound", onFound);
     map.once("locationerror", onError);
   };
 
   return (
-    <div className="absolute bottom-[280px] sm:bottom-[220px] right-3 z-[1000] pointer-events-auto">
-      <button 
+    <div className="absolute bottom-[280px] sm:bottom-[220px] right-3 z-[1000] pointer-events-auto flex flex-col items-end gap-2">
+      {/* In-app Toast — replaces native alert() which is blocked in production */}
+      {message && (
+        <div
+          className={cn(
+            "max-w-[220px] px-4 py-2.5 rounded-2xl text-[11px] font-bold shadow-premium backdrop-blur-md border",
+            status === "success"
+              ? "bg-emerald-500/90 text-white border-emerald-400/30"
+              : "bg-rose-500/90 text-white border-rose-400/30"
+          )}
+        >
+          {message}
+        </div>
+      )}
 
+      {/* Location Button */}
+      <button
         onClick={handleLocate}
-        disabled={loading || !map}
+        disabled={status === "loading" || !map}
         className={cn(
-          "w-12 h-12 bg-white/95 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-premium border border-white/40 transition-all active:scale-90",
-          loading ? "text-primary animate-pulse" : "text-slate-900"
+          "w-12 h-12 bg-white/95 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-premium border border-white/40 transition-all active:scale-90 disabled:opacity-60 disabled:cursor-not-allowed",
+          status === "loading" ? "text-primary animate-pulse" :
+          status === "success" ? "text-emerald-500" :
+          status === "error" ? "text-rose-500" :
+          "text-slate-900 hover:text-primary hover:scale-105"
         )}
-        title="Find My Location"
+        title="আমার অবস্থান খুঁজুন"
+        aria-label="Find My Location"
       >
-        <Crosshair size={24} className={loading ? "animate-spin-[2s]" : ""} />
+        <Crosshair size={24} className={status === "loading" ? "animate-spin" : ""} />
       </button>
     </div>
   );
 }
+
 
 // Map Reference Capture
 function MapSpy({ setMap }: { setMap: (map: L.Map) => void }) {
