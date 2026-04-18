@@ -69,97 +69,156 @@ function ChangeView({ center, zoom }: { center: [number, number], zoom: number }
 }
 
 // Production-Grade User Location Controller
-// Works on: localhost (dev), HTTPS (production/Vercel)
-// Handles: permission denied, unavailable, timeout — with proper in-app UI
+// Key: Uses native navigator.geolocation.getCurrentPosition() directly
+// which is the ONLY reliable way to trigger Chrome's permission prompt,
+// even when map.locate() silently fails due to cached browser state.
 function LocationButton({ map }: { map: L.Map | null }) {
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
+  const [showHelp, setShowHelp] = useState(false);
 
-  const showMessage = (msg: string, type: "success" | "error") => {
+  const showToast = (msg: string, type: "success" | "error") => {
     setStatus(type);
     setMessage(msg);
-    setTimeout(() => {
-      setStatus("idle");
-      setMessage("");
-    }, 4000);
+    setTimeout(() => { setStatus("idle"); setMessage(""); }, 5000);
   };
 
-  const handleLocate = async () => {
+  const handleLocate = () => {
     if (!map || status === "loading") return;
 
-    // Check if Geolocation API exists at all
     if (!navigator.geolocation) {
-      showMessage("এই ব্রাউজারে লোকেশন সাপোর্ট নেই।", "error");
+      showToast("এই ব্রাউজারে লোকেশন সাপোর্ট নেই।", "error");
       return;
     }
 
     setStatus("loading");
 
-    // Always attempt — let the browser show its own permission prompt.
-    // Do NOT pre-check navigator.permissions first, as a cached "denied" state
-    // will block the browser from re-prompting the user on mobile.
-    map.locate({ setView: true, maxZoom: 16, enableHighAccuracy: true, timeout: 10000 });
-
-    const onFound = () => {
-      map.off("locationerror", onError);
-      showMessage("আপনার লোকেশন পাওয়া গেছে!", "success");
-    };
-
-    // eslint-disable-next-line prefer-const
-    let onError: (e: L.ErrorEvent) => void;
-    onError = (e: L.ErrorEvent) => {
-      map.off("locationfound", onFound);
-      const errorMessages: Record<number, string> = {
-        // Code 1: Permission denied — tell user HOW to reset it on mobile
-        1: "লোকেশন অ্যাক্সেস বন্ধ আছে। URL বারের 🔒 আইকনে ট্যাপ করে Site Settings > Location > Allow করুন।",
-        2: "লোকেশন এই মুহূর্তে পাওয়া যাচ্ছে না। GPS চালু আছে কিনা দেখুন।",
-        3: "লোকেশন খুঁজতে বেশি সময় লাগছে। আবার চেষ্টা করুন।",
-      };
-      const msg = errorMessages[e.code] ?? "লোকেশন সনাক্ত করা যায়নি।";
-      showMessage(msg, "error");
-    };
-
-    map.once("locationfound", onFound);
-    map.once("locationerror", onError);
+    // Use native API directly — this is the ONLY call that forces
+    // Chrome to show its permission dialog, even in auto-blocked state.
+    // map.locate() is a wrapper that bypasses this trigger on some devices.
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        // Success: fly to user's location on the map
+        const { latitude, longitude } = position.coords;
+        map.flyTo([latitude, longitude], 16, { animate: true, duration: 1.2 });
+        showToast("আপনার লোকেশন পাওয়া গেছে! ✓", "success");
+      },
+      (error) => {
+        if (error.code === 1) {
+          // PERMISSION_DENIED — show help modal with actionable instructions
+          setStatus("error");
+          setShowHelp(true);
+        } else if (error.code === 2) {
+          showToast("লোকেশন পাওয়া যাচ্ছে না। GPS চালু আছে কিনা দেখুন।", "error");
+        } else if (error.code === 3) {
+          showToast("লোকেশন খুঁজতে বেশি সময় লাগছে। আবার চেষ্টা করুন।", "error");
+        } else {
+          showToast("লোকেশন সনাক্ত করা যায়নি।", "error");
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    );
   };
 
-
   return (
-    <div className="absolute bottom-[280px] sm:bottom-[220px] right-3 z-[1000] pointer-events-auto flex flex-col items-end gap-2">
-      {/* In-app Toast — replaces native alert() which is blocked in production */}
-      {message && (
+    <>
+      {/* ── Permission Denied Help Modal ── */}
+      {showHelp && (
         <div
-          className={cn(
+          className="fixed inset-0 z-[2000] bg-black/40 backdrop-blur-sm flex items-end p-4"
+          onClick={() => { setShowHelp(false); setStatus("idle"); }}
+        >
+          <div
+            className="w-full max-w-sm mx-auto bg-white rounded-[32px] shadow-2xl p-6 border border-border"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-2xl bg-rose-100 flex items-center justify-center shrink-0">
+                <Crosshair size={20} className="text-rose-500" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-wide text-slate-900 leading-none">লোকেশন চালু করুন</h3>
+                <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">Location Permission Required</p>
+              </div>
+            </div>
+
+            <p className="text-[12px] text-slate-600 mb-4 leading-relaxed">
+              আপনার ব্রাউজারে এই সাইটের জন্য লোকেশন বন্ধ আছে। নিচের পদ্ধতিতে চালু করুন:
+            </p>
+
+            <div className="space-y-3 mb-5">
+              {/* Android Chrome */}
+              <div className="bg-blue-50 rounded-2xl p-4 border border-blue-100">
+                <p className="text-[11px] font-black text-blue-700 uppercase mb-2 tracking-wide">📱 Android Chrome</p>
+                <p className="text-[11px] text-slate-700 leading-relaxed">
+                  <strong>Phone Settings</strong> → <strong>Apps</strong> → <strong>Chrome</strong> → <strong>Permissions</strong> → <strong>Location</strong> → <strong>Allow</strong>
+                </p>
+              </div>
+
+              {/* Desktop / URL bar method */}
+              <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                <p className="text-[11px] font-black text-slate-700 uppercase mb-2 tracking-wide">🖥️ Desktop Chrome</p>
+                <p className="text-[11px] text-slate-700 leading-relaxed">
+                  Address bar-এর <strong>🔒 icon</strong> → <strong>Site settings</strong> → <strong>Location</strong> → <strong>Allow</strong>
+                </p>
+              </div>
+
+              {/* Universal fallback */}
+              <div className="bg-amber-50 rounded-2xl p-4 border border-amber-100">
+                <p className="text-[11px] font-black text-amber-700 uppercase mb-2 tracking-wide">⚡ যেকোনো ব্রাউজার</p>
+                <p className="text-[11px] text-slate-700 leading-relaxed">
+                  Chrome address bar-এ টাইপ করুন: <br />
+                  <code className="bg-amber-100 px-1.5 py-0.5 rounded font-mono text-[10px] text-amber-800">chrome://settings/content/location</code>
+                </p>
+              </div>
+            </div>
+
+            <p className="text-[10px] text-slate-400 text-center mb-4">
+              অনুমতি দেওয়ার পর আবার বাটনে ট্যাপ করুন
+            </p>
+
+            <button
+              onClick={() => { setShowHelp(false); setStatus("idle"); }}
+              className="w-full py-3.5 bg-slate-900 text-white font-black text-[13px] uppercase tracking-wider rounded-2xl hover:bg-primary hover:text-black transition-all"
+            >
+              বুঝেছি
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Location Button + Toast ── */}
+      <div className="absolute bottom-[280px] sm:bottom-[220px] right-3 z-[1000] pointer-events-auto flex flex-col items-end gap-2">
+        {message && (
+          <div className={cn(
             "max-w-[220px] px-4 py-2.5 rounded-2xl text-[11px] font-bold shadow-premium backdrop-blur-md border",
             status === "success"
               ? "bg-emerald-500/90 text-white border-emerald-400/30"
               : "bg-rose-500/90 text-white border-rose-400/30"
-          )}
-        >
-          {message}
-        </div>
-      )}
-
-      {/* Location Button */}
-      <button
-        onClick={handleLocate}
-        disabled={status === "loading" || !map}
-        className={cn(
-          "w-12 h-12 bg-white/95 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-premium border border-white/40 transition-all active:scale-90 disabled:opacity-60 disabled:cursor-not-allowed",
-          status === "loading" ? "text-primary animate-pulse" :
-          status === "success" ? "text-emerald-500" :
-          status === "error" ? "text-rose-500" :
-          "text-slate-900 hover:text-primary hover:scale-105"
+          )}>
+            {message}
+          </div>
         )}
-        title="আমার অবস্থান খুঁজুন"
-        aria-label="Find My Location"
-      >
-        <Crosshair size={24} className={status === "loading" ? "animate-spin" : ""} />
-      </button>
-    </div>
+
+        <button
+          onClick={handleLocate}
+          disabled={status === "loading" || !map}
+          className={cn(
+            "w-12 h-12 bg-white/95 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-premium border border-white/40 transition-all active:scale-90 disabled:opacity-60 disabled:cursor-not-allowed",
+            status === "loading" ? "text-primary animate-pulse" :
+            status === "success" ? "text-emerald-500" :
+            status === "error" ? "text-rose-500" :
+            "text-slate-900 hover:text-primary hover:scale-105"
+          )}
+          title="আমার অবস্থান খুঁজুন"
+          aria-label="Find My Location"
+        >
+          <Crosshair size={24} className={status === "loading" ? "animate-spin" : ""} />
+        </button>
+      </div>
+    </>
   );
 }
-
 
 // Map Reference Capture
 function MapSpy({ setMap }: { setMap: (map: L.Map) => void }) {
