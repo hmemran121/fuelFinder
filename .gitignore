@@ -42,6 +42,9 @@ firebase-debug.log*
 firestore-debug.log*
 ui-debug.log*
 
-# typescript
+# Logs & Scratch (Local only)
+/logs
+/scratch
+
 *.tsbuildinfo
 next-env.d.ts

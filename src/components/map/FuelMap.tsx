@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap, ZoomControl } from "react-leaflet";
 import { Crosshair, Navigation } from "lucide-react";
 
@@ -30,6 +30,20 @@ const createPulseIcon = (status: string) => {
             <path d="M9 9V5" />
           </svg>
         </div>
+      </div>
+    `,
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+  });
+};
+
+const createUserIcon = () => {
+  return L.divIcon({
+    className: "custom-div-icon user-location",
+    html: `
+      <div class="relative flex items-center justify-center w-8 h-8">
+        <div class="absolute w-4 h-4 bg-blue-500 rounded-full border-[3px] border-white shadow-lg z-10"></div>
+        <div class="absolute w-8 h-8 bg-blue-500 rounded-full animate-ping opacity-30"></div>
       </div>
     `,
     iconSize: [32, 32],
@@ -72,7 +86,15 @@ function ChangeView({ center, zoom }: { center: [number, number], zoom: number }
 // Key: Uses native navigator.geolocation.getCurrentPosition() directly
 // which is the ONLY reliable way to trigger Chrome's permission prompt,
 // even when map.locate() silently fails due to cached browser state.
-function LocationButton({ map }: { map: L.Map | null }) {
+function LocationButton({ 
+  map, 
+  stations, 
+  onLocationFound 
+}: { 
+  map: L.Map | null;
+  stations: Station[];
+  onLocationFound: (lat: number, lng: number) => void;
+}) {
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
   const [showHelp, setShowHelp] = useState(false);
@@ -100,7 +122,7 @@ function LocationButton({ map }: { map: L.Map | null }) {
       (position) => {
         // Success: fly to user's location on the map
         const { latitude, longitude } = position.coords;
-        map.flyTo([latitude, longitude], 16, { animate: true, duration: 1.2 });
+        onLocationFound(latitude, longitude);
         showToast("আপনার লোকেশন পাওয়া গেছে! ✓", "success");
       },
       (error) => {
@@ -239,6 +261,117 @@ export default function FuelMap({
 }: FuelMapProps) {
   const [isMounted, setIsMounted] = useState(false);
   const [map, setMap] = useState<L.Map | null>(null);
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const markerRefs = useRef<{[key: string]: L.Marker}>({});
+  const watchIdRef = useRef<number | null>(null);
+
+  // Initialize and Auto-Track Location
+  useEffect(() => {
+    try {
+      // 1. Recover last location so users don't have to press repeatedly
+      const savedLoc = localStorage.getItem("fuelFinder_lastLocation");
+      if (savedLoc) {
+         const { lat, lng } = JSON.parse(savedLoc);
+         setUserLocation([lat, lng]);
+      }
+      
+      // 2. Auto-activate real-time tracking if permissions are already granted
+      if (navigator.permissions && navigator.geolocation) {
+         navigator.permissions.query({ name: 'geolocation' }).then((status) => {
+            if (status.state === 'granted') {
+                watchIdRef.current = navigator.geolocation.watchPosition(
+                  (pos) => {
+                     const lats = pos.coords.latitude;
+                     const lngs = pos.coords.longitude;
+                     setUserLocation([lats, lngs]);
+                     localStorage.setItem("fuelFinder_lastLocation", JSON.stringify({lat: lats, lng: lngs}));
+                  },
+                  (err) => console.debug("Auto-track error:", err),
+                  { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
+                );
+            }
+         });
+      }
+    } catch(e) {}
+    
+    return () => {
+       if (watchIdRef.current !== null && navigator.geolocation) {
+          navigator.geolocation.clearWatch(watchIdRef.current);
+       }
+    }
+  }, []);
+
+  // Handle Event: Stop following if user manually moves the map
+  useEffect(() => {
+    if (!map) return;
+    
+    const onTouch = () => setIsFollowing(false);
+    map.on('dragstart', onTouch);
+    map.on('movestart', (e) => {
+      // Only stop if it's a manual gesture (not flyTo)
+      if ((e as any).originalEvent) setIsFollowing(false);
+    });
+
+    return () => {
+      map.off('dragstart', onTouch);
+    };
+  }, [map]);
+
+
+  const handleLocationFound = (lat: number, lng: number) => {
+    setUserLocation([lat, lng]);
+    localStorage.setItem("fuelFinder_lastLocation", JSON.stringify({lat, lng}));
+    setIsFollowing(true); // Enable Follow Mode
+
+    // Start background watch if not already started
+    if (watchIdRef.current === null && navigator.geolocation) {
+       watchIdRef.current = navigator.geolocation.watchPosition(
+          (pos) => {
+             const latitude = pos.coords.latitude;
+             const longitude = pos.coords.longitude;
+             setUserLocation([latitude, longitude]);
+             localStorage.setItem("fuelFinder_lastLocation", JSON.stringify({lat: latitude, lng: longitude}));
+          },
+          () => {},
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
+       );
+    }
+
+    if (map) {
+      map.flyTo([lat, lng], 16, { animate: true, duration: 1.2 });
+      
+      const userLatLng = L.latLng(lat, lng);
+      let closestStation: Station | null = null;
+      let minDistance = Infinity;
+
+      for (const station of stations) {
+         const dist = map.distance(userLatLng, L.latLng(station.latitude, station.longitude));
+         if (dist < minDistance) {
+           minDistance = dist;
+           closestStation = station;
+         }
+      }
+
+      // If within 2km (2000 meters) to test, dynamically open the popup
+      if (closestStation && minDistance <= 2000) {
+        setTimeout(() => {
+          const marker = markerRefs.current[closestStation!.id];
+          if (marker) {
+            marker.openPopup();
+          }
+        }, 1300); // Wait for map animation to mostly finish
+      }
+    }
+  };
+
+  // Selection Logic: Moves map only on explicit selection triggers
+  useEffect(() => {
+    if (isFollowing && map && userLocation) {
+       map.panTo(userLocation, { animate: true, duration: 0.5 });
+    }
+  }, [userLocation, isFollowing, map]);
+
 
 
   useEffect(() => {
@@ -277,6 +410,9 @@ export default function FuelMap({
               key={station.id}
               position={[station.latitude, station.longitude]}
               icon={createPulseIcon(effectiveStatus)}
+              ref={(r) => {
+                if (r) markerRefs.current[station.id] = r;
+              }}
               eventHandlers={{
                 click: () => onSelect?.(station)
               }}
@@ -302,12 +438,25 @@ export default function FuelMap({
           );
         })}
 
+        {userLocation && (
+          <Marker position={userLocation} icon={createUserIcon()}>
+            <Popup className="premium-popup">
+              <div className="p-2 min-w-[120px] text-center">
+                <div className="w-8 h-8 mx-auto bg-blue-100 rounded-full flex items-center justify-center mb-1">
+                  <Crosshair size={16} className="text-blue-600" />
+                </div>
+                <h3 className="font-bold text-slate-900 text-xs uppercase tracking-tight">আপনার অবস্থান</h3>
+              </div>
+            </Popup>
+          </Marker>
+        )}
+
         <ZoomControl position="bottomright" />
         <MapSpy setMap={setMap} />
       </MapContainer>
 
       {/* Render custom controls outside MapContainer to avoid DOM/Portal issues */}
-      <LocationButton map={map} />
+      <LocationButton map={map} stations={stations} onLocationFound={handleLocationFound} />
 
       
       {/* Mobile-specific Zoom Overrides */}

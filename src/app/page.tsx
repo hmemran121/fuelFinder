@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Station } from "@/types";
 import { SearchOverlay } from "@/components/map/SearchOverlay";
 import { StationDetail } from "@/components/map/StationDetail";
@@ -44,6 +44,17 @@ export default function Home() {
     zoom: 13
   });
   const { user, isAdmin } = useAuthStore();
+
+  // 1. Recover last known location on mount
+  useEffect(() => {
+    const saved = localStorage.getItem("fuelFinder_lastLocation");
+    if (saved) {
+      try {
+        const { lat, lng } = JSON.parse(saved);
+        setMapViewState({ center: [lat, lng], zoom: 16 });
+      } catch (e) {}
+    }
+  }, []);
 
   // Selection Logic: Moves map only on explicit selection triggers
   const handleSelectStation = (station: Station) => {
