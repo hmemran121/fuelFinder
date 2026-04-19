@@ -16,6 +16,8 @@ export interface Station {
   last_updated_by?: string;
   area?: string;
   latest_photo?: string;
+  fuelTypes?: string[];
+  amenities?: string[];
 }
 
 export interface UserProfile {

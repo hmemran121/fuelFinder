@@ -226,6 +226,37 @@ export const StationDetail = ({ station, onClose }: StationDetailProps) => {
                       </div>
                     </div>
                   )}
+
+                  {/* Fuel Types & Amenities */}
+                  {(station.fuelTypes?.length || station.amenities?.length) ? (
+                    <div className="p-6 bg-slate-50/80 rounded-[32px] border border-slate-100 flex flex-col gap-5">
+                      {station.fuelTypes && station.fuelTypes.length > 0 && (
+                        <div className="flex flex-col gap-3">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">জ্বালানির ধরন</span>
+                          <div className="flex flex-wrap gap-2">
+                            {station.fuelTypes.map((fuel) => (
+                              <span key={fuel} className="px-3 py-1.5 bg-[#FF6B00]/10 text-[#FF6B00] border border-[#FF6B00]/20 rounded-xl text-[11px] font-black tracking-wider uppercase shadow-sm">
+                                {fuel}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {station.amenities && station.amenities.length > 0 && (
+                        <div className="flex flex-col gap-3">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">সুবিধাসমূহ</span>
+                          <div className="flex flex-wrap gap-2">
+                            {station.amenities.map((amenity) => (
+                              <span key={amenity} className="px-3 py-1.5 bg-white text-slate-600 border border-slate-200 shadow-sm rounded-xl text-[11px] font-bold tracking-wider uppercase flex items-center gap-1.5">
+                                <CheckCircle2 size={12} className="text-emerald-500" /> {amenity}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
                   
                   {/* MASTER LOGIC: Human Verification - Professional Redesign */}
                   {(effectiveStatus === 'active' && station.last_updated_by !== user?.uid) && (
@@ -340,8 +371,8 @@ export const StationDetail = ({ station, onClose }: StationDetailProps) => {
                         )}
                       </div>
                     )}
-                    <PrimaryButton variant="secondary" className="w-[85%] mx-auto py-5 rounded-[24px] border-primary/20 text-primary bg-primary/5 font-black uppercase tracking-normal text-[13px] hover:bg-primary/10" icon={<ExternalLink size={18} />} onClick={() => window.open(stationService.getGoogleMapsLink(station.latitude, station.longitude), '_blank')}>
-                      গুগল ম্যাপে দেখুন
+                    <PrimaryButton variant="secondary" className="w-[85%] mx-auto py-5 rounded-[24px] border-primary/20 text-primary bg-primary/5 font-black uppercase tracking-normal text-[13px] hover:bg-primary/10 shadow-sm" icon={<Navigation size={18} />} onClick={() => window.open(stationService.getGoogleMapsLink(station.latitude, station.longitude), '_blank')}>
+                      ডিরেকশন পান (গুগল ম্যাপস)
                     </PrimaryButton>
 
                   </div>

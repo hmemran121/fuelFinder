@@ -20,6 +20,7 @@ export const SearchOverlay = ({ stations, onSelect }: SearchOverlayProps) => {
   const [results, setResults] = useState<Station[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const [activeFilters, setActiveFilters] = useState<string[]>([]);
   const fuse = new Fuse(stations, {
     keys: ["name", "source"],
     threshold: 0.4,
@@ -31,17 +32,42 @@ export const SearchOverlay = ({ stations, onSelect }: SearchOverlayProps) => {
     } else {
       setQuery("");
       setResults([]);
+      setActiveFilters([]);
     }
   }, [isSearchOpen]);
 
   useEffect(() => {
+    let baseStations = stations;
+    
+    // Apply Fuel Type Filters
+    if (activeFilters.length > 0) {
+      baseStations = baseStations.filter(s => {
+        // If station has no fuelTypes defined but filters are active, decide to hide or show. Let's hide for strict filtering
+        if (!s.fuelTypes || s.fuelTypes.length === 0) return false;
+        return activeFilters.some(filter => s.fuelTypes?.includes(filter));
+      });
+    }
+
     if (query.length > 1) {
-      const searchResults = fuse.search(query).map(r => r.item).slice(0, 8);
+      // Create a new Fuse instance with the filtered baseStations
+      const activeFuse = new Fuse(baseStations, { keys: ["name", "source"], threshold: 0.4 });
+      const searchResults = activeFuse.search(query).map(r => r.item).slice(0, 8);
       setResults(searchResults);
     } else {
-      setResults([]);
+      // If no query but filters exist, show all matching the filter up to 8
+      if (activeFilters.length > 0) {
+        setResults(baseStations.slice(0, 8));
+      } else {
+        setResults([]);
+      }
     }
-  }, [query]);
+  }, [query, activeFilters, stations]);
+
+  const toggleFilter = (fuel: string) => {
+    setActiveFilters(prev => 
+      prev.includes(fuel) ? prev.filter(f => f !== fuel) : [...prev, fuel]
+    );
+  };
 
   return (
     <AnimatePresence>
@@ -88,6 +114,25 @@ export const SearchOverlay = ({ stations, onSelect }: SearchOverlayProps) => {
               >
                 <X size={24} />
               </button>
+            </div>
+
+            {/* Filter Section */}
+            <div className="px-8 pb-4 border-b border-white/10 flex items-center gap-3 overflow-x-auto no-scrollbar pt-2">
+              <span className="text-[9px] font-black uppercase tracking-widest text-white/40 border-r border-white/10 pr-3 mr-1">Filter</span>
+              {['Octane', 'Petrol', 'Diesel', 'CNG', 'LPG'].map(type => (
+                <button
+                  key={type}
+                  onClick={() => toggleFilter(type)}
+                  className={cn(
+                    "px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all whitespace-nowrap shadow-sm",
+                    activeFilters.includes(type)
+                      ? "bg-[#FF6B00] text-white border-[#FF6B00] shadow-[0_0_15px_rgba(255,107,0,0.5)] scale-105"
+                      : "bg-white/5 text-white/60 border-white/10 hover:bg-white/10 hover:text-white"
+                  )}
+                >
+                  {type}
+                </button>
+              ))}
             </div>
 
             {/* Results Section */}
